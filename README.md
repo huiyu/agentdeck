@@ -1,5 +1,7 @@
 # agentdeck
 
+**English** · [简体中文](README.zh-CN.md)
+
 > Mission control for your terminal coding agents — one board across **Claude Code**, **Codex** (and more), on **zellij** or **tmux**.
 
 Running several coding agents at once means babysitting a wall of tabs to find
