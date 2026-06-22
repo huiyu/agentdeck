@@ -54,9 +54,9 @@ _agent_pid() {
 
 # ── naming: cwd → project (= mux session) + tab (= repo:branch) ────────────────
 # Mirrors the zellij zj/zjp convention so the picker maps cleanly back to a tab.
-# Sets globals `proj` and `tab`.
+# Sets globals `proj`, `tab`, and `repo`.
 _derive_names() {
-  local cwd="${1:-$PWD}" branch repo remote
+  local cwd="${1:-$PWD}" branch remote
   proj="${ZELLIJ_SESSION_NAME:-}"
   branch="$(git -C "$cwd" symbolic-ref --short HEAD 2>/dev/null \
             || git -C "$cwd" rev-parse --short HEAD 2>/dev/null || true)"
@@ -135,7 +135,7 @@ _ingest_hook() {
   # Ambient banner: the one signal that works no matter which tab is focused.
   case "$event" in
     Notification) _notify "⏳ $tab is waiting on you" "${msg:-needs input}" ;;
-    Stop) [[ "$AGENTDECK_NOTIFY_ON_STOP" == "1" ]] && _notify "✅ $tab finished" "${msg:-$cwd}" ;;
+    Stop) [[ "$AGENTDECK_NOTIFY_ON_STOP" == "1" ]] && _notify "✅ $tab finished" "${msg:-$repo}" ;;
   esac
   return 0
 }
