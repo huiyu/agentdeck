@@ -89,7 +89,11 @@ _notify() {
   if   command -v terminal-notifier >/dev/null 2>&1; then
     terminal-notifier -title "$title" -message "$msg" >/dev/null 2>&1 || true
   elif command -v osascript >/dev/null 2>&1; then
-    osascript -e "display notification \"$msg\" with title \"$title\" sound name \"Glass\"" >/dev/null 2>&1 || true
+    # Force UTF-8 for AppleScript text: CoreFoundation picks the encoding from
+    # __CF_USER_TEXT_ENCODING, which hook/launchd subprocesses often lack — then
+    # osascript decodes our UTF-8 as MacRoman and the banner shows mojibake.
+    __CF_USER_TEXT_ENCODING=0x0:0x8000100:0x8000100 \
+      osascript -e "display notification \"$msg\" with title \"$title\" sound name \"Glass\"" >/dev/null 2>&1 || true
   elif command -v notify-send >/dev/null 2>&1; then
     notify-send "$title" "$msg" >/dev/null 2>&1 || true
   fi
