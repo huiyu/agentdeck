@@ -37,6 +37,18 @@ _load_mux() {
 
 _self() { printf '%s' "$AGENTDECK_ROOT/bin/agentdeck"; }
 
+# The command string to bake into an agent's config. Prefer the stable launcher
+# `$HOME/.local/bin/agentdeck` (kept literal so it stays portable across machines
+# and survives the repo moving) when it links back to us; else the resolved path.
+_self_cmd() {
+  local link="$HOME/.local/bin/agentdeck"
+  if [[ -L "$link" && "$(readlink "$link" 2>/dev/null)" == "$AGENTDECK_ROOT/bin/agentdeck" ]]; then
+    printf '$HOME/.local/bin/agentdeck'
+  else
+    printf '%s' "$AGENTDECK_ROOT/bin/agentdeck"
+  fi
+}
+
 # Best-effort: find the agent's own pid by walking up from the hook's parent.
 # Hooks are spawned by the agent, so the nearest ancestor whose command matches
 # the agent (Claude may run as `node`) is it. Stored so `kill` can really stop it.
@@ -269,7 +281,7 @@ core_install() {
   for a in "${agents[@]}"; do
     _load_agent "$a" || continue
     if ! agent_detect; then echo "– skip $a (not installed)"; continue; fi
-    agent_install "$(_self)" && echo "✓ wired $a → agentdeck"
+    agent_install "$(_self_cmd)" && echo "✓ wired $a → agentdeck"
   done
   echo "Done. New agent sessions will appear in: agentdeck pick"
 }

@@ -26,13 +26,16 @@ agent_notify_state() { echo skip; }
 _claude_cfg() { printf '%s' "$HOME/.claude/settings.json"; }
 _claude_cmd() { printf '"%s" ingest claude' "$1"; }
 
+# Wired if any hook command invokes our ingest — matched leniently so it's
+# detected whatever launcher path was used (~/.local/bin, repo path, $HOME form).
 agent_installed() {
-  jq -e --arg c "$(_claude_cmd "$(_self)")" \
-    '[.hooks[]?[]?.hooks[]?.command] | index($c) != null' "$(_claude_cfg)" >/dev/null 2>&1
+  jq -e '[.hooks[]?[]?.hooks[]?.command] | any(test("agentdeck.* ingest claude"))' \
+    "$(_claude_cfg)" >/dev/null 2>&1
 }
 
-# Idempotently add our ingest command to each relevant hook event, preserving
-# any hooks the user already configured.
+# Idempotently wire our ingest into each relevant hook event: drop any prior
+# agentdeck entry (any launcher path) first, so re-running never duplicates and
+# always converges on the canonical command; preserve the user's other hooks.
 agent_install() {
   local self="$1" cfg cmd tmp
   cfg="$(_claude_cfg)"; cmd="$(_claude_cmd "$self")"
@@ -42,7 +45,7 @@ agent_install() {
     .hooks = (.hooks // {}) |
     reduce ("SessionStart","UserPromptSubmit","Notification","Stop","SessionEnd") as $ev (.;
       .hooks[$ev] = (
-        ((.hooks[$ev] // []) | map(select(([.hooks[]?.command] | index($cmd)) | not)))
+        ((.hooks[$ev] // []) | map(select(([.hooks[]?.command] | any(test("agentdeck.* ingest claude"))) | not)))
         + [{hooks: [{type: "command", command: $cmd}]}]
       ))
   ' "$cfg" > "$tmp" && mv "$tmp" "$cfg"

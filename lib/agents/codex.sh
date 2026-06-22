@@ -39,8 +39,8 @@ _codex_config()     { printf '%s' "$HOME/.codex/config.toml"; }
 _codex_cmd()        { printf '"%s" ingest codex' "$1"; }
 
 agent_installed() {
-  jq -e --arg c "$(_codex_cmd "$(_self)")" \
-    '[.hooks[]?[]?.hooks[]?.command] | index($c) != null' "$(_codex_hooks_json)" >/dev/null 2>&1
+  jq -e '[.hooks[]?[]?.hooks[]?.command] | any(test("agentdeck.* ingest codex"))' \
+    "$(_codex_hooks_json)" >/dev/null 2>&1
 }
 
 agent_install() {
@@ -52,19 +52,22 @@ agent_install() {
     .hooks = (.hooks // {}) |
     reduce ("SessionStart","UserPromptSubmit","Stop","SessionEnd") as $ev (.;
       .hooks[$ev] = (
-        ((.hooks[$ev] // []) | map(select(([.hooks[]?.command] | index($cmd)) | not)))
+        ((.hooks[$ev] // []) | map(select(([.hooks[]?.command] | any(test("agentdeck.* ingest codex"))) | not)))
         + [{hooks: [{type: "command", command: $cmd}]}]
       ))
   ' "$hj" > "$tmp" && mv "$tmp" "$hj"
 
-  # notify (waiting). Only append if the user has no notify yet — never clobber.
+  # notify (waiting). codex execs this argv array directly (no shell), so it must
+  # be a resolved absolute path — a literal $HOME wouldn't expand. Only append if
+  # the user has no notify yet — never clobber.
+  local notify_path; notify_path="$(_self)"
   ct="$(_codex_config)"; touch "$ct"
   if grep -qE '^[[:space:]]*notify[[:space:]]*=' "$ct"; then
     {
       echo "  ! ~/.codex/config.toml already sets 'notify' — for the 'waiting' state, set it to:"
-      echo "      notify = [\"$self\", \"ingest\", \"codex\", \"--notify\"]"
+      echo "      notify = [\"$notify_path\", \"ingest\", \"codex\", \"--notify\"]"
     } >&2
   else
-    printf '\nnotify = ["%s", "ingest", "codex", "--notify"]\n' "$self" >> "$ct"
+    printf '\nnotify = ["%s", "ingest", "codex", "--notify"]\n' "$notify_path" >> "$ct"
   fi
 }
