@@ -106,6 +106,7 @@ Codex `notify` (it prints the line to add instead).
 | `agentdeck doctor` | Deps, detected agents, wiring status |
 | `agentdeck install [agent…]` | Wire hooks (default: all detected) |
 | `agentdeck list` | Raw TSV rows (scriptable) |
+| `agentdeck dir` | Print the state directory (scriptable) |
 
 **kill vs forget.** Ctrl-x **terminates the agent**: agentdeck records each
 session's pid (walking up from the hook to the agent process) and sends it
@@ -143,15 +144,17 @@ Then add its icon to `_agentdeck_icon_json` in `lib/core.sh`.
 
 **A new multiplexer** — `lib/mux/<name>.sh` needs just two functions:
 
-- `mux_inside` — echo the current session name, or nothing if we're outside
-- `mux_jump <proj> <tab>` — focus that session's tab
+- `mux_jump <proj> <tab>` — focus that session's tab (powers `agentdeck pick`)
+- `mux_launch <proj> <tab> <cwd> <cmd>` — open a new tab running `<cmd>` (powers
+  `agentdeck new`)
 
 The tmux backend (`lib/mux/tmux.sh`) is a stubbed example waiting on these two
 bodies — contributions welcome.
 
 ## Limitations (v0.1)
 
-- **zellij only.** tmux is a ~15-line adapter away (stub in `lib/mux/tmux.sh`) — v0.2.
+- **zellij only.** tmux is a small adapter away — two function bodies (`mux_jump`,
+  `mux_launch`) in `lib/mux/tmux.sh` — v0.2.
 - **Codex `waiting` is best-effort.** Codex doesn't yet expose `approval-requested`
   to hooks ([openai/codex#14813](https://github.com/openai/codex/issues/14813)),
   so it arrives via the `notify` program, which carries no session id or cwd

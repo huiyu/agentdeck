@@ -1,5 +1,4 @@
 # local config / state never belongs in the repo
 config
 *.local
-demo/*.tmp
 .DS_Store

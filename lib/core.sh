@@ -304,6 +304,7 @@ agentdeck — mission control for terminal coding agents
   agentdeck install [agent…]     Wire the hook into Claude / Codex configs
   agentdeck doctor               Check deps, detected agents, wiring status
   agentdeck list                 Print raw rows (scriptable)
+  agentdeck dir                  Print the state directory (scriptable)
   agentdeck ingest <agent>       Hook entrypoint (agents call this; not for humans)
   agentdeck version | help
 

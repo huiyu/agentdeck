@@ -5,9 +5,6 @@
 # *focused* tab — which is exactly why agentdeck keeps state in files and only
 # asks the mux to do the jump.
 
-# Echo the current session name if we're inside one, else nothing.
-mux_inside() { [[ -n "${ZELLIJ:-}" ]] && printf '%s' "${ZELLIJ_SESSION_NAME:-}"; }
-
 # Jump to <session>'s <tab>. Mirrors zjp's nesting rules: you can't attach a
 # session from inside another, so handle the three cases explicitly.
 mux_jump() {
