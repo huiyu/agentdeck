@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# agentdeck — mission control for terminal coding agents.
+# One board across Claude Code, Codex (and more), on zellij or tmux.
+#
+# This is the single entrypoint. It resolves its own lib/ dir (following
+# symlinks so it works from ~/.local/bin), loads config, then dispatches.
+#
+#   agentdeck ingest <agent>     Hook entrypoint — agents call this on events.
+#   agentdeck pick               fzf board: see every session, jump to one.
+#   agentdeck list               Raw TSV rows (used by pick; scriptable).
+#   agentdeck preview <file>     Render one session for the fzf preview pane.
+#   agentdeck kill <file>        Forget a session.
+#   agentdeck install [agent…]   Wire the ingest hook into each agent's config.
+#   agentdeck doctor             Show deps, detected agents, and wiring status.
+#   agentdeck dir | version | help
+set -euo pipefail
+
+# Resolve the real location of this script (follow symlinks) → repo root → lib/.
+_src="${BASH_SOURCE[0]}"
+while [ -L "$_src" ]; do
+  _dir="$(cd -P "$(dirname "$_src")" >/dev/null 2>&1 && pwd)"
+  _src="$(readlink "$_src")"
+  [[ "$_src" != /* ]] && _src="$_dir/$_src"
+done
+AGENTDECK_ROOT="$(cd -P "$(dirname "$_src")/.." >/dev/null 2>&1 && pwd)"
+AGENTDECK_LIB="$AGENTDECK_ROOT/lib"
+
+# Optional config: a plain shell file of KEY=value overrides.
+AGENTDECK_CONFIG="${AGENTDECK_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/agentdeck/config}"
+# shellcheck source=/dev/null
+[[ -f "$AGENTDECK_CONFIG" ]] && source "$AGENTDECK_CONFIG"
+
+: "${AGENTDECK_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/agentdeck}"
+: "${AGENTDECK_TTL:=86400}"          # prune state files older than N seconds
+: "${AGENTDECK_NOTIFY_ON_STOP:=1}"   # macOS/Linux banner when a session finishes
+
+# shellcheck source=lib/core.sh
+source "$AGENTDECK_LIB/core.sh"
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  ingest)            core_ingest "$@" ;;
+  pick)              core_pick ;;
+  list)              core_list ;;
+  preview)           core_preview "${1:-}" ;;
+  kill)              core_kill "${1:-}" ;;
+  install)           core_install "$@" ;;
+  doctor)            core_doctor ;;
+  dir)               printf '%s\n' "$AGENTDECK_STATE_DIR" ;;
+  version|-v|--version) printf 'agentdeck %s\n' "$AGENTDECK_VERSION" ;;
+  help|-h|--help)    core_usage ;;
+  *) printf 'agentdeck: unknown command %q (try: agentdeck help)\n' "$cmd" >&2; exit 2 ;;
+esac
