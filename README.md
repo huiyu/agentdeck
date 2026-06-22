@@ -48,6 +48,29 @@ render the *focused* tab's title and swallow a background pane's escape
 sequences, so a background agent can't reliably mark its own tab. The board reads
 state directly, and desktop banners cover the proactive "needs you" moment.
 
+## Project layout
+
+```
+bin/agentdeck            single entrypoint — resolves lib/, loads config, dispatches
+lib/core.sh              shared engine — state store, fzf board, notifications, ranking
+lib/agents/<name>.sh     agent adapter — events → state, + how to wire/detect the hook
+   ├─ claude.sh          Claude Code profile
+   └─ codex.sh           Codex profile (+ notify fallback for "waiting")
+lib/mux/<name>.sh        mux adapter — "where am I" + "jump to a tab"
+   ├─ zellij.sh          zellij backend (implemented)
+   └─ tmux.sh            tmux backend (stub — v0.2)
+install.sh               symlink the CLI onto PATH
+agentdeck.example.config example config to copy to ~/.config/agentdeck/config
+```
+
+State lives as one JSON file per session under `$AGENTDECK_STATE_DIR`, named
+`<agent>-<session_id>.json`:
+
+```json
+{ "id": "…", "agent": "claude", "state": "waiting", "proj": "blibee",
+  "tab": "blibee:main", "cwd": "/…", "transcript": "/…", "msg": "…", "ts": 1750000000 }
+```
+
 ## Install
 
 Requires **bash**, **jq**, **fzf** (and a notifier: `terminal-notifier`/
@@ -78,15 +101,53 @@ Codex `notify` (it prints the line to add instead).
 
 | Command | What |
 |---|---|
-| `agentdeck pick` | Open the board; Enter jumps, Ctrl-x forgets a session |
+| `agentdeck pick` | Open the board. **Enter** jumps · **Ctrl-x** kills the agent · **Ctrl-d** forgets the row |
+| `agentdeck new [agent]` | Launch an agent in the current directory's project tab (default: first detected) |
 | `agentdeck doctor` | Deps, detected agents, wiring status |
 | `agentdeck install [agent…]` | Wire hooks (default: all detected) |
 | `agentdeck list` | Raw TSV rows (scriptable) |
 
+**kill vs forget.** Ctrl-x **terminates the agent**: agentdeck records each
+session's pid (walking up from the hook to the agent process) and sends it
+SIGTERM — after re-checking the live process still belongs to that agent, so a
+reused pid can't hit something else. The tab stays open as a plain shell (closing
+a *background* tab in zellij would require yanking focus). Ctrl-d just drops the
+row, leaving the agent running — for clearing stale/crashed entries.
+
 ## Configuration
 
-Copy `agentdeck.example.config` to `~/.config/agentdeck/config` (plain `KEY=value`):
-state dir, prune TTL, whether to notify on finish, and a forced multiplexer.
+Copy `agentdeck.example.config` to `~/.config/agentdeck/config` (plain `KEY=value`;
+all optional). Every key also reads from the environment.
+
+| Key | Default | What |
+|---|---|---|
+| `AGENTDECK_STATE_DIR` | `$XDG_STATE_HOME/agentdeck` | Where per-session state files live |
+| `AGENTDECK_TTL` | `86400` | Prune state files untouched for this many seconds (dead/crashed sessions) |
+| `AGENTDECK_NOTIFY_ON_STOP` | `1` | Desktop banner when a session finishes; set `0` to alert only on *waiting* |
+| `AGENTDECK_MUX` | *(autodetect)* | Force a multiplexer instead of detecting from `$ZELLIJ` / `$TMUX` |
+
+## Extend it
+
+The board, state store, and notifications are agent- and mux-agnostic. Adding
+support is a single file behind one of two adapter axes.
+
+**A new agent** — `lib/agents/<name>.sh` (model it on `claude.sh`):
+
+- `AGENT_F_SID` / `AGENT_F_CWD` / `AGENT_F_TRANSCRIPT` — jq paths into the hook JSON
+- `agent_detect` — is this agent installed?
+- `agent_state_for <event>` — map a hook event to `idle` / `working` / `waiting` / `gone` / `skip`
+- `agent_notify_state <type>` — same, for the out-of-band `notify` transport (or `echo skip`)
+- `agent_installed` / `agent_install <self>` — check and idempotently wire the hook
+
+Then add its icon to `_agentdeck_icon_json` in `lib/core.sh`.
+
+**A new multiplexer** — `lib/mux/<name>.sh` needs just two functions:
+
+- `mux_inside` — echo the current session name, or nothing if we're outside
+- `mux_jump <proj> <tab>` — focus that session's tab
+
+The tmux backend (`lib/mux/tmux.sh`) is a stubbed example waiting on these two
+bodies — contributions welcome.
 
 ## Limitations (v0.1)
 

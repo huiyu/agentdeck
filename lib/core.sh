@@ -37,6 +37,21 @@ _load_mux() {
 
 _self() { printf '%s' "$AGENTDECK_ROOT/bin/agentdeck"; }
 
+# Best-effort: find the agent's own pid by walking up from the hook's parent.
+# Hooks are spawned by the agent, so the nearest ancestor whose command matches
+# the agent (Claude may run as `node`) is it. Stored so `kill` can really stop it.
+_agent_pid() {
+  local want="$1" pid="$PPID" depth=0 comm pat
+  case "$want" in claude) pat='^(claude|node)$' ;; *) pat="^${want}$" ;; esac
+  while [[ -n "$pid" && "$pid" != 0 && "$pid" != 1 && $depth -lt 8 ]]; do
+    comm="$(ps -o comm= -p "$pid" 2>/dev/null | sed 's#.*/##' || true)"
+    [[ "$comm" =~ $pat ]] && { printf '%s' "$pid"; return 0; }
+    pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+    depth=$((depth + 1))
+  done
+  return 1
+}
+
 # ── naming: cwd → project (= mux session) + tab (= repo:branch) ────────────────
 # Mirrors the zellij zj/zjp convention so the picker maps cleanly back to a tab.
 # Sets globals `proj` and `tab`.
@@ -67,18 +82,22 @@ _notify() {
 }
 
 # ── state file IO ─────────────────────────────────────────────────────────────
-# _persist <agent> <sid> <state> <proj> <tab> <cwd> <transcript> <msg>
+# _persist <agent> <sid> <state> <proj> <tab> <cwd> <transcript> <msg> [pid]
 _persist() {
   mkdir -p "$AGENTDECK_STATE_DIR"
-  local agent="$1" sid="$2" state="$3" proj="$4" tab="$5" cwd="$6" transcript="$7" msg="$8"
+  local agent="$1" sid="$2" state="$3" proj="$4" tab="$5" cwd="$6" transcript="$7" msg="$8" pid="${9:-}"
   local file="$AGENTDECK_STATE_DIR/${agent}-${sid//[^A-Za-z0-9._-]/-}.json"
-  # Preserve the last non-empty assistant message across state-only updates.
+  # Preserve the last non-empty message and the pid across state-only updates
+  # (e.g. the codex notify path has neither).
   [[ -z "$msg" && -f "$file" ]] && msg="$(jq -r '.msg // empty' "$file" 2>/dev/null || true)"
+  [[ -z "$pid" && -f "$file" ]] && pid="$(jq -r '.pid // empty' "$file" 2>/dev/null || true)"
   jq -n --arg id "$sid" --arg agent "$agent" --arg state "$state" \
         --arg proj "$proj" --arg tab "$tab" --arg cwd "$cwd" \
-        --arg transcript "$transcript" --arg msg "$msg" --argjson ts "$(date +%s)" \
+        --arg transcript "$transcript" --arg msg "$msg" --arg pid "$pid" \
+        --argjson ts "$(date +%s)" \
     '{id:$id, agent:$agent, state:$state, proj:$proj, tab:$tab,
-      cwd:$cwd, transcript:$transcript, msg:$msg, ts:$ts}' > "$file"
+      cwd:$cwd, transcript:$transcript, msg:$msg,
+      pid:(if $pid=="" then null else ($pid|tonumber) end), ts:$ts}' > "$file"
 }
 
 # ── ingest: the hook entrypoint ───────────────────────────────────────────────
@@ -95,7 +114,7 @@ core_ingest() {
 
 # Hooks transport (Claude + Codex): JSON on stdin, identical field names.
 _ingest_hook() {
-  local agent="$1" input event state sid cwd transcript msg
+  local agent="$1" input event state sid cwd transcript msg pid
   input="$(cat)"
   event="$(jq -r '.hook_event_name // empty' <<<"$input")"
   state="$(agent_state_for "$event")"
@@ -109,13 +128,14 @@ _ingest_hook() {
   cwd="$(jq -r "${AGENT_F_CWD} // empty" <<<"$input")"
   transcript="$(jq -r "${AGENT_F_TRANSCRIPT} // empty" <<<"$input")"
   msg="$(jq -r '.last_assistant_message // empty' <<<"$input" | head -c 280)"
+  pid="$(_agent_pid "$agent" || true)"
   _derive_names "$cwd"
-  _persist "$agent" "$sid" "$state" "$proj" "$tab" "$cwd" "$transcript" "$msg"
+  _persist "$agent" "$sid" "$state" "$proj" "$tab" "$cwd" "$transcript" "$msg" "$pid"
 
   # Ambient banner: the one signal that works no matter which tab is focused.
   case "$event" in
-    Notification) _notify "⏳ $tab 在等你" "${msg:-需要确认}" ;;
-    Stop) [[ "$AGENTDECK_NOTIFY_ON_STOP" == "1" ]] && _notify "✅ $tab 跑完了" "${msg:-$cwd}" ;;
+    Notification) _notify "⏳ $tab is waiting on you" "${msg:-needs input}" ;;
+    Stop) [[ "$AGENTDECK_NOTIFY_ON_STOP" == "1" ]] && _notify "✅ $tab finished" "${msg:-$cwd}" ;;
   esac
   return 0
 }
@@ -135,8 +155,8 @@ _ingest_notify() {
            done )"
   if [[ -n "$file" ]]; then sid="$(jq -r '.id' "$file")"; else sid="notify-${tab//[^A-Za-z0-9._-]/-}"; fi
   msg="$(jq -r '."last-assistant-message" // .last_assistant_message // empty' <<<"$payload" | head -c 280)"
-  _persist "$agent" "$sid" "$state" "$proj" "$tab" "$cwd" "" "$msg"
-  [[ "$state" == "waiting" ]] && _notify "⏳ $tab 在等你" "${msg:-需要确认}"
+  _persist "$agent" "$sid" "$state" "$proj" "$tab" "$cwd" "" "$msg" ""
+  [[ "$state" == "waiting" ]] && _notify "⏳ $tab is waiting on you" "${msg:-needs input}"
   return 0
 }
 
@@ -177,9 +197,47 @@ core_preview() {
   ' 2>/dev/null | tail -n 20
 }
 
+# kill: actually terminate the agent (SIGTERM its pid), then drop the state file.
+# Verifies the live process still belongs to the agent before signalling, so a
+# reused pid can't get an innocent process killed. The agent's own SessionEnd
+# hook also removes the file; the rm here covers crashed/pid-less sessions.
 core_kill() {
+  local b f pid agent comm
+  b="$(basename "${1:-}")"; [[ -n "$b" && "$b" == *.json ]] || return 0
+  f="$AGENTDECK_STATE_DIR/$b"
+  if [[ -f "$f" ]]; then
+    pid="$(jq -r '.pid // empty' "$f" 2>/dev/null || true)"
+    agent="$(jq -r '.agent // empty' "$f" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      comm="$(ps -o comm= -p "$pid" 2>/dev/null | sed 's#.*/##' || true)"
+      case "${agent}::${comm}" in
+        claude::claude|claude::node|*"::${agent}") kill "$pid" 2>/dev/null || true ;;
+      esac
+    fi
+  fi
+  rm -f "$f"
+}
+
+# forget: drop the state file only, leaving the agent running (for stale rows).
+core_forget() {
   local b; b="$(basename "${1:-}")"
   [[ -n "$b" && "$b" == *.json ]] && rm -f "$AGENTDECK_STATE_DIR/$b"
+}
+
+# new: launch (or focus a tab for) an agent in the current directory's project.
+core_new() {
+  local agent="${1:-}" a cwd="$PWD"
+  if [[ -z "$agent" ]]; then
+    for a in claude codex; do
+      _load_agent "$a" 2>/dev/null && agent_detect && { agent="$a"; break; }
+    done
+  fi
+  [[ -n "$agent" ]] || { echo "agentdeck new: no agent given and none detected" >&2; return 2; }
+  _load_agent "$agent" || return 2
+  agent_detect || { echo "agentdeck new: '$agent' is not installed" >&2; return 2; }
+  _derive_names "$cwd"
+  _load_mux
+  mux_launch "$proj" "$tab" "$cwd" "$agent"
 }
 
 # ── pick: the fzf board ───────────────────────────────────────────────────────
@@ -191,9 +249,10 @@ core_pick() {
   [[ -n "$list" ]] || { echo "agentdeck: no active agent sessions" >&2; return 0; }
   sel="$(printf '%s\n' "$list" | fzf --no-multi --delimiter=$'\t' --with-nth=2,3,4,5 \
         --prompt='agentdeck> ' \
-        --header='🟡 waiting · 🔴 working · 🟢 idle    │ Enter: jump · Ctrl-x: forget' \
+        --header='🟡 waiting · 🔴 working · 🟢 idle    │ Enter: jump · Ctrl-x: kill · Ctrl-d: forget' \
         --preview="$self preview {7}" --preview-window='right,55%,wrap' \
-        --bind="ctrl-x:execute-silent($self kill {7})+reload($self list)")" || return 0
+        --bind="ctrl-x:execute-silent($self kill {7})+reload($self list)" \
+        --bind="ctrl-d:execute-silent($self forget {7})+reload($self list)")" || return 0
   [[ -n "$sel" ]] || return 0
   tab="$(printf '%s' "$sel" | cut -f4)"
   proj="$(printf '%s' "$sel" | cut -f6)"
@@ -241,11 +300,14 @@ core_usage() {
 agentdeck — mission control for terminal coding agents
 
   agentdeck pick                 Open the board (fzf): jump to the session needing you
+  agentdeck new [agent]          Launch an agent in this directory's project tab
   agentdeck install [agent…]     Wire the hook into Claude / Codex configs
   agentdeck doctor               Check deps, detected agents, wiring status
   agentdeck list                 Print raw rows (scriptable)
   agentdeck ingest <agent>       Hook entrypoint (agents call this; not for humans)
   agentdeck version | help
+
+In the board: Enter jumps · Ctrl-x kills the agent · Ctrl-d forgets the row
 
 State: 🟡 waiting (needs you) · 🔴 working · 🟢 idle (done)
 Docs:  https://github.com/huiyu/agentdeck

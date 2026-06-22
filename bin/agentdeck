@@ -41,9 +41,11 @@ cmd="${1:-help}"; shift || true
 case "$cmd" in
   ingest)            core_ingest "$@" ;;
   pick)              core_pick ;;
+  new)               core_new "${1:-}" ;;
   list)              core_list ;;
   preview)           core_preview "${1:-}" ;;
   kill)              core_kill "${1:-}" ;;
+  forget)            core_forget "${1:-}" ;;
   install)           core_install "$@" ;;
   doctor)            core_doctor ;;
   dir)               printf '%s\n' "$AGENTDECK_STATE_DIR" ;;

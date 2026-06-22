@@ -13,3 +13,8 @@ mux_jump() {
   echo "agentdeck: tmux backend is not implemented yet (v0.2). Target: $1 / $2" >&2
   return 1
 }
+
+mux_launch() {
+  echo "agentdeck: tmux backend is not implemented yet (v0.2). Would launch: $4 in $3" >&2
+  return 1
+}
