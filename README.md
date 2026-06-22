@@ -126,6 +126,8 @@ all optional). Every key also reads from the environment.
 | `AGENTDECK_TTL` | `86400` | Prune state files untouched for this many seconds (dead/crashed sessions) |
 | `AGENTDECK_NOTIFY_ON_STOP` | `1` | Desktop banner when a session finishes; set `0` to alert only on *waiting* |
 | `AGENTDECK_MUX` | *(autodetect)* | Force a multiplexer instead of detecting from `$ZELLIJ` / `$TMUX` |
+| `AGENTDECK_NOTIFY_SENDER` | *(none)* | Borrow another app's notification icon + identity (a bundle id, e.g. `com.apple.Terminal`). Requires `terminal-notifier`; no effect on the osascript fallback |
+| `AGENTDECK_NOTIFY_ICON` | *(none)* | Path/URL to a custom notification icon image. Requires `terminal-notifier`; no effect on the osascript fallback |
 
 ## Extend it
 

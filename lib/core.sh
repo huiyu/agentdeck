@@ -87,7 +87,14 @@ _derive_names() {
 _notify() {
   local title="${1//[\"\\]/ }" msg="${2//[\"\\]/ }"
   if   command -v terminal-notifier >/dev/null 2>&1; then
-    terminal-notifier -title "$title" -message "$msg" >/dev/null 2>&1 || true
+    # Optional custom icon: AGENTDECK_NOTIFY_SENDER borrows another app's icon
+    # and identity (a bundle id, e.g. com.apple.Terminal); AGENTDECK_NOTIFY_ICON
+    # is a path/URL to a custom image. Both are no-ops on the osascript path,
+    # whose icon is locked to Script Editor by macOS.
+    local -a tn=(-title "$title" -message "$msg")
+    [[ -n "${AGENTDECK_NOTIFY_SENDER:-}" ]] && tn+=(-sender "$AGENTDECK_NOTIFY_SENDER")
+    [[ -n "${AGENTDECK_NOTIFY_ICON:-}"   ]] && tn+=(-appIcon "$AGENTDECK_NOTIFY_ICON")
+    terminal-notifier "${tn[@]}" >/dev/null 2>&1 || true
   elif command -v osascript >/dev/null 2>&1; then
     # Force UTF-8 for AppleScript text: CoreFoundation picks the encoding from
     # __CF_USER_TEXT_ENCODING, which hook/launchd subprocesses often lack — then
