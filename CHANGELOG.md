@@ -7,11 +7,20 @@
   a session's window; `new` opens a window running the agent, creating the session
   if needed. Windows are resolved by id (not the colon-bearing `repo:branch` name)
   and `automatic-rename` is disabled so jump targets stay stable (#1).
+- Configurable notification icon: `AGENTDECK_NOTIFY_SENDER` (borrow another app's
+  icon + identity by bundle id) and `AGENTDECK_NOTIFY_ICON` (custom image). Both
+  require `terminal-notifier`; no effect on the osascript fallback.
+- Simplified Chinese README (`README.zh-CN.md`), cross-linked with the English one.
 
 ### Changed
 - `_derive_names` now uses the tmux session name as the project when running
   inside tmux, mirroring the existing zellij behavior.
 - Stop notification falls back to the repo name instead of the full cwd path.
+
+### Fixed
+- osascript notifications no longer show mojibake for the ✅ emoji or non-ASCII
+  messages: force `__CF_USER_TEXT_ENCODING` to UTF-8, which hook/launchd
+  subprocesses often lack (CoreFoundation otherwise decodes our UTF-8 as MacRoman).
 
 ## [0.1.0] - 2026-06-22
 
