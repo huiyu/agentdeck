@@ -25,7 +25,7 @@ nailed this for **tmux + Claude**. agentdeck generalizes the idea along two axes
   stdin, identical event names), so unifying them is a thin per-agent profile,
   not a rewrite. New agents = one small file.
 - **Any multiplexer** — state lives in plain files, not tmux session variables,
-  so the board works under zellij today and tmux next.
+  so the board works under both zellij and tmux.
 
 ## How it works
 
@@ -58,7 +58,7 @@ lib/agents/<name>.sh     agent adapter — events → state, + how to wire/detec
    └─ codex.sh           Codex profile (+ notify fallback for "waiting")
 lib/mux/<name>.sh        mux adapter — "where am I" + "jump to a tab"
    ├─ zellij.sh          zellij backend (implemented)
-   └─ tmux.sh            tmux backend (stub — v0.2)
+   └─ tmux.sh            tmux backend (implemented)
 install.sh               symlink the CLI onto PATH
 agentdeck.example.config example config to copy to ~/.config/agentdeck/config
 ```
@@ -148,13 +148,11 @@ Then add its icon to `_agentdeck_icon_json` in `lib/core.sh`.
 - `mux_launch <proj> <tab> <cwd> <cmd>` — open a new tab running `<cmd>` (powers
   `agentdeck new`)
 
-The tmux backend (`lib/mux/tmux.sh`) is a stubbed example waiting on these two
-bodies — contributions welcome.
+Both the zellij (`lib/mux/zellij.sh`) and tmux (`lib/mux/tmux.sh`) backends
+implement exactly these two functions — use them as references.
 
 ## Limitations (v0.1)
 
-- **zellij only.** tmux is a small adapter away — two function bodies (`mux_jump`,
-  `mux_launch`) in `lib/mux/tmux.sh` — v0.2.
 - **Codex `waiting` is best-effort.** Codex doesn't yet expose `approval-requested`
   to hooks ([openai/codex#14813](https://github.com/openai/codex/issues/14813)),
   so it arrives via the `notify` program, which carries no session id or cwd
@@ -165,8 +163,8 @@ bodies — contributions welcome.
 
 ## Roadmap
 
-- v0.2: tmux backend; optional zellij `zjstatus` widget for an always-on
-  aggregate count in the status bar.
+- v0.2: optional zellij `zjstatus` widget for an always-on aggregate count in
+  the status bar.
 - Later: more agents (gemini-cli, aider, opencode) as their hook support lands.
 
 ## License

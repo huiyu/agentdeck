@@ -70,6 +70,8 @@ _agent_pid() {
 _derive_names() {
   local cwd="${1:-$PWD}" branch remote
   proj="${ZELLIJ_SESSION_NAME:-}"
+  # Inside tmux (no zellij): the session name is the project, mirroring zellij.
+  [[ -z "$proj" && -n "${TMUX:-}" ]] && proj="$(tmux display-message -p '#S' 2>/dev/null || true)"
   branch="$(git -C "$cwd" symbolic-ref --short HEAD 2>/dev/null \
             || git -C "$cwd" rev-parse --short HEAD 2>/dev/null || true)"
   repo=""
