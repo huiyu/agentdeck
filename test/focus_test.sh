@@ -30,6 +30,12 @@ source "$AGENTDECK_LIB/core.sh"
 eq "host from TERM_PROGRAM" "ghostty" \
   "$(env -u TMUX TERM_PROGRAM=ghostty bash -c 'source "'"$AGENTDECK_LIB"'/core.sh"; _detect_host')"
 
+# _detect_host must not abort under `set -e` when the tmux lookup fails (no
+# server). Called directly here (the strict case); prints DONE only if it
+# returned instead of aborting.
+eq "detect_host tolerates tmux failure" "DONE" \
+  "$(bash -euo pipefail -c 'source "'"$AGENTDECK_LIB"'/core.sh"; unset TERM_PROGRAM; tmux() { return 1; }; _detect_host; printf DONE' 2>/dev/null)"
+
 # focus_host dispatch table: stub the GUI leaves (each runs in the command-
 # substitution subshell, so the redefinitions don't leak) and assert routing.
 _dispatch() { # _dispatch <strat> <host> <cwd>

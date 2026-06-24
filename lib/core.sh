@@ -48,7 +48,11 @@ _load_mux() {
 _detect_host() {
   local tp="${TERM_PROGRAM:-}"
   if { [[ -z "$tp" || "$tp" == "tmux" ]]; } && command -v tmux >/dev/null 2>&1; then
-    tp="$(tmux show-environment -g TERM_PROGRAM 2>/dev/null | sed -n 's/^TERM_PROGRAM=//p')"
+    # `|| true`: with no tmux server (or a server lacking TERM_PROGRAM in its
+    # global env) the pipeline exits non-zero under pipefail. Today this runs
+    # inside `host="$(_detect_host)"` so errexit wouldn't propagate, but keep the
+    # helper abort-proof on its own in case it's ever called directly.
+    tp="$(tmux show-environment -g TERM_PROGRAM 2>/dev/null | sed -n 's/^TERM_PROGRAM=//p')" || true
   fi
   printf '%s' "$tp"
 }
