@@ -52,3 +52,8 @@ mux_launch() {
 
 # Quote a string as a KDL value (used to build the launch layout).
 _kdl_str() { local s="${1//\\/\\\\}"; s="${s//\"/\\\"}"; printf '"%s"' "$s"; }
+
+# Placeholder: selecting a tab in a detached/other zellij session from outside
+# needs a client context zellij doesn't expose the same way tmux does. Left as a
+# no-op for now; the host-focus layer still brings the app forward. (TODO)
+mux_select() { return 0; }
