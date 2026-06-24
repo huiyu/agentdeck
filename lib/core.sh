@@ -265,6 +265,33 @@ core_kill() {
   rm -f "$f"
 }
 
+# focus: notification click handler. Runs detached (launchd, no tty), so it
+# selects the window without attaching, then brings the host app/tab forward.
+# Strategy is resolved HERE (at click time) from AGENTDECK_NOTIFY_FOCUS + the
+# recorded host, so config changes take effect without re-launching agents.
+core_focus() {
+  local b f host mux proj tab cwd strat
+  b="$(basename "${1:-}")"; [[ -n "$b" && "$b" == *.json ]] || return 0
+  f="$AGENTDECK_STATE_DIR/$b"; [[ -f "$f" ]] || return 0
+  strat="${AGENTDECK_NOTIFY_FOCUS:-auto}"
+  [[ "$strat" == "off" ]] && return 0
+  host="$(jq -r '.host // empty' "$f")"
+  mux="$(jq -r '.mux // empty' "$f")"
+  proj="$(jq -r '.proj // empty' "$f")"
+  tab="$(jq -r '.tab // empty' "$f")"
+  cwd="$(jq -r '.cwd // empty' "$f")"
+  # axis ①: make the agent's window active (best-effort) using the recorded mux.
+  if [[ -n "$mux" && -f "$AGENTDECK_LIB/mux/$mux.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$AGENTDECK_LIB/mux/$mux.sh"
+    mux_select "$proj" "$tab" 2>/dev/null || true
+  fi
+  # axis ②: bring the host app/tab to the front.
+  # shellcheck source=/dev/null
+  source "$AGENTDECK_LIB/focus.sh"
+  focus_host "$strat" "$host" "$cwd"
+}
+
 # forget: drop the state file only, leaving the agent running (for stale rows).
 core_forget() {
   local b; b="$(basename "${1:-}")"
