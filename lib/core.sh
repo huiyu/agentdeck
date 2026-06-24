@@ -23,13 +23,20 @@ _load_agent() {
   source "$AGENTDECK_LIB/agents/$a.sh"
 }
 
-_load_mux() {
+# Resolve the multiplexer name from config/env (no sourcing). Recorded in state
+# so the detached click handler knows which backend to drive.
+_mux_name() {
   local m="${AGENTDECK_MUX:-}"
   if [[ -z "$m" ]]; then
     if   [[ -n "${ZELLIJ:-}" ]]; then m=zellij
     elif [[ -n "${TMUX:-}"   ]]; then m=tmux
     else m=zellij; fi
   fi
+  printf '%s' "$m"
+}
+
+_load_mux() {
+  local m; m="$(_mux_name)"
   [[ -f "$AGENTDECK_LIB/mux/$m.sh" ]] || { echo "agentdeck: unknown multiplexer '$m'" >&2; return 2; }
   # shellcheck source=/dev/null
   source "$AGENTDECK_LIB/mux/$m.sh"
