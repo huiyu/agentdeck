@@ -275,11 +275,14 @@ core_focus() {
   f="$AGENTDECK_STATE_DIR/$b"; [[ -f "$f" ]] || return 0
   strat="${AGENTDECK_NOTIFY_FOCUS:-auto}"
   [[ "$strat" == "off" ]] && return 0
-  host="$(jq -r '.host // empty' "$f")"
-  mux="$(jq -r '.mux // empty' "$f")"
-  proj="$(jq -r '.proj // empty' "$f")"
-  tab="$(jq -r '.tab // empty' "$f")"
-  cwd="$(jq -r '.cwd // empty' "$f")"
+  # Best-effort reads: tolerate a half-written/corrupt state file so a click
+  # never aborts the detached handler mid-way (// empty guards null fields, not
+  # jq's own parse-error exit; the 2>/dev/null || true covers the latter).
+  host="$(jq -r '.host // empty' "$f" 2>/dev/null || true)"
+  mux="$(jq -r '.mux // empty' "$f" 2>/dev/null || true)"
+  proj="$(jq -r '.proj // empty' "$f" 2>/dev/null || true)"
+  tab="$(jq -r '.tab // empty' "$f" 2>/dev/null || true)"
+  cwd="$(jq -r '.cwd // empty' "$f" 2>/dev/null || true)"
   # axis ①: make the agent's window active (best-effort) using the recorded mux.
   if [[ -n "$mux" && -f "$AGENTDECK_LIB/mux/$mux.sh" ]]; then
     # shellcheck source=/dev/null
