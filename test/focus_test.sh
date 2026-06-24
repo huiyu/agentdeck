@@ -24,4 +24,10 @@ eq "strat vscode"  "vscode"  "$(_focus_strategy_for_host vscode)"
 eq "strat basic"   "basic"   "$(_focus_strategy_for_host iTerm.app)"
 eq "strat empty"   "basic"   "$(_focus_strategy_for_host '')"
 
+# _detect_host: honour TERM_PROGRAM when it is a real terminal (not tmux).
+# shellcheck source=/dev/null
+source "$AGENTDECK_LIB/core.sh"
+eq "host from TERM_PROGRAM" "ghostty" \
+  "$(env -u TMUX TERM_PROGRAM=ghostty bash -c 'source "'"$AGENTDECK_LIB"'/core.sh"; _detect_host')"
+
 exit $fail

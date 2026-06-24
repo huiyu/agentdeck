@@ -42,6 +42,17 @@ _load_mux() {
   source "$AGENTDECK_LIB/mux/$m.sh"
 }
 
+# Best-effort host terminal (raw TERM_PROGRAM). Inside tmux, TERM_PROGRAM is
+# overwritten with "tmux", but the server keeps the real value in its global
+# environment — recover it from there. Empty when undetectable.
+_detect_host() {
+  local tp="${TERM_PROGRAM:-}"
+  if { [[ -z "$tp" || "$tp" == "tmux" ]]; } && command -v tmux >/dev/null 2>&1; then
+    tp="$(tmux show-environment -g TERM_PROGRAM 2>/dev/null | sed -n 's/^TERM_PROGRAM=//p')"
+  fi
+  printf '%s' "$tp"
+}
+
 _self() { printf '%s' "$AGENTDECK_ROOT/bin/agentdeck"; }
 
 # The command string to bake into an agent's config. Prefer the stable launcher
