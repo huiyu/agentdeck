@@ -111,6 +111,7 @@ alias ad='agentdeck pick'
 | `AGENTDECK_MUX` | *(自动探测)* | 强制指定多路复用器,而非从 `$ZELLIJ` / `$TMUX` 自动探测 |
 | `AGENTDECK_NOTIFY_SENDER` | *(无)* | 借用另一个 app 的通知图标与身份(一个 bundle id,例如 `com.apple.Terminal`)。需要 `terminal-notifier`;对 osascript 兜底无效 |
 | `AGENTDECK_NOTIFY_ICON` | *(无)* | 自定义通知图标图片的路径/URL。需要 `terminal-notifier`;对 osascript 兜底无效 |
+| `AGENTDECK_NOTIFY_FOCUS` | `auto` | 点击横幅跳回等待中的会话。`auto` 自动探测宿主终端（Ghostty 精确切到对应 tab；其它终端把 App 调前台；VS Code 复用项目窗口）；可强制 `ghostty`/`vscode`/`app:<bundle-id>`，或设 `off` 关闭。仅 macOS + `terminal-notifier` |
 
 ## 扩展它
 

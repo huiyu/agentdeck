@@ -130,6 +130,7 @@ all optional). Every key also reads from the environment.
 | `AGENTDECK_MUX` | *(autodetect)* | Force a multiplexer instead of detecting from `$ZELLIJ` / `$TMUX` |
 | `AGENTDECK_NOTIFY_SENDER` | *(none)* | Borrow another app's notification icon + identity (a bundle id, e.g. `com.apple.Terminal`). Requires `terminal-notifier`; no effect on the osascript fallback |
 | `AGENTDECK_NOTIFY_ICON` | *(none)* | Path/URL to a custom notification icon image. Requires `terminal-notifier`; no effect on the osascript fallback |
+| `AGENTDECK_NOTIFY_FOCUS` | `auto` | Click a banner to jump back to the waiting session. `auto` detects the host terminal (Ghostty focuses the exact tab; others bring the app forward; VS Code reuses the project window); force with `ghostty`/`vscode`/`app:<bundle-id>`, or `off` to disable. macOS + `terminal-notifier` only |
 
 ## Extend it
 

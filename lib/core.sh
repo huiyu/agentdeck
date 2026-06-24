@@ -10,7 +10,7 @@
 # "<agent>-<session_id>.json". This replaces tmux's per-session variables and is
 # what makes the board work across agents and multiplexers uniformly.
 
-AGENTDECK_VERSION="0.1.0"
+AGENTDECK_VERSION="0.2.0"
 
 # Per-agent palette for the board (kept distinct from the 🔴🟡🟢 state dots).
 _agentdeck_icon_json='{"claude":"🟣","codex":"🔵","gemini":"🟤","aider":"🟠"}'
