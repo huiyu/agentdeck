@@ -103,7 +103,7 @@ _derive_names() {
 
 # ── notifications (portable: macOS / Linux) ───────────────────────────────────
 _notify() {
-  local title="${1//[\"\\]/ }" msg="${2//[\"\\]/ }"
+  local title="${1//[\"\\]/ }" msg="${2//[\"\\]/ }" file="${3:-}"
   if   command -v terminal-notifier >/dev/null 2>&1; then
     # Optional custom icon: AGENTDECK_NOTIFY_SENDER borrows another app's icon
     # and identity (a bundle id, e.g. com.apple.Terminal); AGENTDECK_NOTIFY_ICON
@@ -112,6 +112,16 @@ _notify() {
     local -a tn=(-title "$title" -message "$msg")
     [[ -n "${AGENTDECK_NOTIFY_SENDER:-}" ]] && tn+=(-sender "$AGENTDECK_NOTIFY_SENDER")
     [[ -n "${AGENTDECK_NOTIFY_ICON:-}"   ]] && tn+=(-appIcon "$AGENTDECK_NOTIFY_ICON")
+    # Click action: jump back to the waiting session. Without -execute,
+    # terminal-notifier's default click reveals its own bundle folder in Finder.
+    # The command runs detached via launchd; core_focus resolves the strategy.
+    # terminal-notifier hands the string to `/bin/sh -c`, so shell-quote both the
+    # launcher path and the (already-sanitized) file with %q to stay robust even
+    # if the install path contains spaces/metacharacters.
+    if [[ -n "$file" ]]; then
+      local _cmd; printf -v _cmd '%q focus %q' "$(_self)" "$file"
+      tn+=(-execute "$_cmd")
+    fi
     terminal-notifier "${tn[@]}" >/dev/null 2>&1 || true
   elif command -v osascript >/dev/null 2>&1; then
     # Force UTF-8 for AppleScript text: CoreFoundation picks the encoding from
@@ -181,8 +191,8 @@ _ingest_hook() {
 
   # Ambient banner: the one signal that works no matter which tab is focused.
   case "$event" in
-    Notification) _notify "⏳ $tab is waiting on you" "${msg:-needs input}" ;;
-    Stop) [[ "$AGENTDECK_NOTIFY_ON_STOP" == "1" ]] && _notify "✅ $tab finished" "${msg:-$repo}" ;;
+    Notification) _notify "⏳ $tab is waiting on you" "${msg:-needs input}" "${agent}-${sid//[^A-Za-z0-9._-]/-}.json" ;;
+    Stop) [[ "$AGENTDECK_NOTIFY_ON_STOP" == "1" ]] && _notify "✅ $tab finished" "${msg:-$repo}" "${agent}-${sid//[^A-Za-z0-9._-]/-}.json" ;;
   esac
   return 0
 }
@@ -203,7 +213,7 @@ _ingest_notify() {
   if [[ -n "$file" ]]; then sid="$(jq -r '.id' "$file")"; else sid="notify-${tab//[^A-Za-z0-9._-]/-}"; fi
   msg="$(jq -r '."last-assistant-message" // .last_assistant_message // empty' <<<"$payload" | head -c 280)"
   _persist "$agent" "$sid" "$state" "$proj" "$tab" "$cwd" "" "$msg" ""
-  [[ "$state" == "waiting" ]] && _notify "⏳ $tab is waiting on you" "${msg:-needs input}"
+  [[ "$state" == "waiting" ]] && _notify "⏳ $tab is waiting on you" "${msg:-needs input}" "${agent}-${sid//[^A-Za-z0-9._-]/-}.json"
   return 0
 }
 
