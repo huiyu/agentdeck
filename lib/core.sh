@@ -134,13 +134,17 @@ _persist() {
   # (e.g. the codex notify path has neither).
   [[ -z "$msg" && -f "$file" ]] && msg="$(jq -r '.msg // empty' "$file" 2>/dev/null || true)"
   [[ -z "$pid" && -f "$file" ]] && pid="$(jq -r '.pid // empty' "$file" 2>/dev/null || true)"
+  local host mux
+  host="$(_detect_host)"; mux="$(_mux_name)"
   jq -n --arg id "$sid" --arg agent "$agent" --arg state "$state" \
         --arg proj "$proj" --arg tab "$tab" --arg cwd "$cwd" \
         --arg transcript "$transcript" --arg msg "$msg" --arg pid "$pid" \
+        --arg host "$host" --arg mux "$mux" \
         --argjson ts "$(date +%s)" \
     '{id:$id, agent:$agent, state:$state, proj:$proj, tab:$tab,
       cwd:$cwd, transcript:$transcript, msg:$msg,
-      pid:(if $pid=="" then null else ($pid|tonumber) end), ts:$ts}' > "$file"
+      pid:(if $pid=="" then null else ($pid|tonumber) end),
+      host:$host, mux:$mux, ts:$ts}' > "$file"
 }
 
 # ── ingest: the hook entrypoint ───────────────────────────────────────────────
