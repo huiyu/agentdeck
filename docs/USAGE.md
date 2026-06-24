@@ -83,6 +83,29 @@ Re-running is safe (idempotent) and it never clobbers your existing settings.
 The command baked into each hook is the stable launcher (`$HOME/.local/bin/agentdeck`)
 when it links back to the repo, so it survives the repo moving.
 
+### Updating
+
+The launcher is a symlink to `bin/agentdeck` in your clone, which sources `lib/`
+at runtime — so updating is just pulling the clone; no re-symlink needed.
+
+```sh
+# find your clone dir (if unsure):
+dirname "$(dirname "$(readlink -f "$(command -v agentdeck)")")"
+
+git -C ~/.agentdeck pull   # use the path from above
+agentdeck version          # confirm the new version
+agentdeck doctor           # verify deps / agents / wiring / notifier
+```
+
+- **No re-symlink** — the symlink points at the repo; `git pull` updates it in place.
+- **Re-`agentdeck install` only when needed** — hook wiring rarely changes between
+  releases; re-run it (idempotent) only if `doctor` reports missing wiring or you
+  added an agent. Notification click-to-focus is wired at runtime (via the
+  banner's `-execute`), not at install time, so it needs no re-install.
+- **New dependencies** — a release may add a tool; `doctor` flags anything
+  missing. For click-to-focus, install `terminal-notifier` (see
+  [Notifications & click-to-focus](#notifications--click-to-focus)).
+
 ## Commands
 
 ```

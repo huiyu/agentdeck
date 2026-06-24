@@ -69,6 +69,23 @@ brew install terminal-notifier # macOS: enables clickable, jump-back banners
 
 写入每个 hook 的命令使用稳定的启动器路径（`$HOME/.local/bin/agentdeck`），只要它软链回仓库，仓库移动后依然有效。
 
+### 更新
+
+启动器是指向 clone 里 `bin/agentdeck` 的符号链接，运行时再加载 `lib/` —— 所以更新就是拉取这个 clone，无需重建链接。
+
+```sh
+# 不确定 clone 目录时，反查：
+dirname "$(dirname "$(readlink -f "$(command -v agentdeck)")")"
+
+git -C ~/.agentdeck pull   # 换成上一步查到的路径
+agentdeck version          # 确认新版本
+agentdeck doctor           # 检查 deps / agents / 接线 / notifier
+```
+
+- **无需重建链接** —— 链接指向仓库，`git pull` 就地更新。
+- **仅在需要时重跑 `agentdeck install`** —— 各版本间 hook 接线很少变；只有当 `doctor` 报告接线缺失、或你新增了 agent 时才重跑（幂等）。通知的点击跳转是运行时接线的（通过横幅的 `-execute`），并非安装时写入，所以无需重新 install。
+- **新增依赖** —— 某个版本可能引入新工具；`doctor` 会标出缺失项。点击跳转需安装 `terminal-notifier`（见[通知与点击跳转](#通知与点击跳转)）。
+
 ## 命令
 
 ```

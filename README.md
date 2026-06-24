@@ -103,6 +103,21 @@ its own entries (idempotent, won't clobber yours):
 
 Full install/wiring details: **[Usage manual → Install & wiring](docs/USAGE.md#install--wiring)**.
 
+### Updating
+
+agentdeck is a git clone plus a symlink, so update in place — no re-symlink:
+
+```sh
+git -C ~/.agentdeck pull   # or wherever you cloned it
+agentdeck version          # confirm the new version
+agentdeck doctor           # check deps / wiring / notifier
+```
+
+Re-run `agentdeck install` only if `doctor` flags missing wiring or you added a
+new agent (it's idempotent). Click-to-focus is wired at runtime, so it needs no
+re-install — but it does need `terminal-notifier` (see
+[Notifications & click-to-focus](#notifications--click-to-focus)).
+
 ## Usage
 
 | Command | What |

@@ -83,6 +83,18 @@ alias ad='agentdeck pick'
 
 完整安装/接线说明:**[使用手册 → 安装与接入](docs/USAGE.zh-CN.md#安装与接入)**。
 
+### 更新
+
+agentdeck 就是一个 git clone 加一个符号链接,所以就地更新即可 —— 无需重建链接:
+
+```sh
+git -C ~/.agentdeck pull   # 换成你实际 clone 的目录
+agentdeck version          # 确认新版本
+agentdeck doctor           # 检查 deps / 接线 / notifier
+```
+
+只有当 `doctor` 提示接线缺失、或你新增了 agent 时,才需要重跑 `agentdeck install`(幂等)。点击跳转是运行时接线的,无需重新 install —— 但需要 `terminal-notifier`(见[通知与点击跳转](#通知与点击跳转))。
+
 ## 用法
 
 | 命令 | 作用 |
