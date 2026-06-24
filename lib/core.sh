@@ -293,6 +293,10 @@ core_focus() {
   proj="$(jq -r '.proj // empty' "$f" 2>/dev/null || true)"
   tab="$(jq -r '.tab // empty' "$f" 2>/dev/null || true)"
   cwd="$(jq -r '.cwd // empty' "$f" 2>/dev/null || true)"
+  # Allowlist the mux name before it indexes a path to source: it comes verbatim
+  # from the (possibly poisoned) state file, and `..` would otherwise let the
+  # -f guard below source an arbitrary .sh outside the adapters dir.
+  case "$mux" in tmux|zellij) ;; *) mux="" ;; esac
   # axis ①: make the agent's window active (best-effort) using the recorded mux.
   if [[ -n "$mux" && -f "$AGENTDECK_LIB/mux/$mux.sh" ]]; then
     # shellcheck source=/dev/null

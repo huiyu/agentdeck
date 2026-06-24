@@ -30,4 +30,18 @@ source "$AGENTDECK_LIB/core.sh"
 eq "host from TERM_PROGRAM" "ghostty" \
   "$(env -u TMUX TERM_PROGRAM=ghostty bash -c 'source "'"$AGENTDECK_LIB"'/core.sh"; _detect_host')"
 
+# focus_host dispatch table: stub the GUI leaves (each runs in the command-
+# substitution subshell, so the redefinitions don't leak) and assert routing.
+_dispatch() { # _dispatch <strat> <host> <cwd>
+  _focus_app()     { printf 'app:%s' "$1"; }
+  _focus_ghostty() { printf 'ghostty:%s' "$1"; }
+  _focus_vscode()  { printf 'vscode:%s' "$1"; }
+  focus_host "$1" "$2" "$3"
+}
+eq "dispatch off"             ""            "$(_dispatch off ghostty /x)"
+eq "dispatch app:<bundle>"    "app:com.foo" "$(_dispatch app:com.foo ghostty /x)"
+eq "dispatch auto→ghostty"    "ghostty:/x"  "$(_dispatch auto ghostty /x)"
+eq "dispatch auto→vscode"     "vscode:/x"   "$(_dispatch auto vscode /x)"
+eq "dispatch auto+empty→basic" "app:"       "$(_dispatch auto '' /x)"
+
 exit $fail
