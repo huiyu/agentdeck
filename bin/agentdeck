@@ -10,6 +10,7 @@
 #   agentdeck list               Raw TSV rows (used by pick; scriptable).
 #   agentdeck preview <file>     Render one session for the fzf preview pane.
 #   agentdeck kill <file>        Forget a session.
+#   agentdeck focus <file>       Notification click handler — jump to that session.
 #   agentdeck install [agent…]   Wire the ingest hook into each agent's config.
 #   agentdeck doctor             Show deps, detected agents, and wiring status.
 #   agentdeck dir | version | help
@@ -45,6 +46,7 @@ case "$cmd" in
   list)              core_list ;;
   preview)           core_preview "${1:-}" ;;
   kill)              core_kill "${1:-}" ;;
+  focus)             core_focus "${1:-}" ;;
   forget)            core_forget "${1:-}" ;;
   install)           core_install "$@" ;;
   doctor)            core_doctor ;;

@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Added
+- feat(notify): clicking a banner now jumps back to the waiting agent — Ghostty
+  focuses the exact tab, other terminals come forward, VS Code reuses the project
+  window. Configurable via `AGENTDECK_NOTIFY_FOCUS`. Fixes the old behaviour where
+  clicking opened terminal-notifier's install folder in Finder.
 - Multiplexer adapter: **tmux** (`lib/mux/tmux.sh`) — `jump` switches/attaches to
   a session's window; `new` opens a window running the agent, creating the session
   if needed. Windows are resolved by id (not the colon-bearing `repo:branch` name)

@@ -58,3 +58,14 @@ mux_launch() {
     tmux attach -t "=$proj"
   fi
 }
+
+# Select <proj>'s <tab> window WITHOUT attaching. Used by the notification
+# click handler, which runs detached (launchd, no tty) so it cannot attach.
+# Makes the agent's window active in its session; any attached client follows.
+mux_select() {
+  local proj="$1" tab="$2" wid
+  tmux has-session -t "=$proj" 2>/dev/null || return 1
+  wid="$(_tmux_window_id "$proj" "$tab")"
+  [[ -n "$wid" ]] || return 1
+  tmux select-window -t "$wid" 2>/dev/null || true
+}

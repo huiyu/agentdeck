@@ -10,7 +10,7 @@
 # "<agent>-<session_id>.json". This replaces tmux's per-session variables and is
 # what makes the board work across agents and multiplexers uniformly.
 
-AGENTDECK_VERSION="0.1.0"
+AGENTDECK_VERSION="0.2.0"
 
 # Per-agent palette for the board (kept distinct from the 🔴🟡🟢 state dots).
 _agentdeck_icon_json='{"claude":"🟣","codex":"🔵","gemini":"🟤","aider":"🟠"}'
@@ -23,16 +23,38 @@ _load_agent() {
   source "$AGENTDECK_LIB/agents/$a.sh"
 }
 
-_load_mux() {
+# Resolve the multiplexer name from config/env (no sourcing). Recorded in state
+# so the detached click handler knows which backend to drive.
+_mux_name() {
   local m="${AGENTDECK_MUX:-}"
   if [[ -z "$m" ]]; then
     if   [[ -n "${ZELLIJ:-}" ]]; then m=zellij
     elif [[ -n "${TMUX:-}"   ]]; then m=tmux
     else m=zellij; fi
   fi
+  printf '%s' "$m"
+}
+
+_load_mux() {
+  local m; m="$(_mux_name)"
   [[ -f "$AGENTDECK_LIB/mux/$m.sh" ]] || { echo "agentdeck: unknown multiplexer '$m'" >&2; return 2; }
   # shellcheck source=/dev/null
   source "$AGENTDECK_LIB/mux/$m.sh"
+}
+
+# Best-effort host terminal (raw TERM_PROGRAM). Inside tmux, TERM_PROGRAM is
+# overwritten with "tmux", but the server keeps the real value in its global
+# environment — recover it from there. Empty when undetectable.
+_detect_host() {
+  local tp="${TERM_PROGRAM:-}"
+  if { [[ -z "$tp" || "$tp" == "tmux" ]]; } && command -v tmux >/dev/null 2>&1; then
+    # `|| true`: with no tmux server (or a server lacking TERM_PROGRAM in its
+    # global env) the pipeline exits non-zero under pipefail. Today this runs
+    # inside `host="$(_detect_host)"` so errexit wouldn't propagate, but keep the
+    # helper abort-proof on its own in case it's ever called directly.
+    tp="$(tmux show-environment -g TERM_PROGRAM 2>/dev/null | sed -n 's/^TERM_PROGRAM=//p')" || true
+  fi
+  printf '%s' "$tp"
 }
 
 _self() { printf '%s' "$AGENTDECK_ROOT/bin/agentdeck"; }
@@ -85,7 +107,7 @@ _derive_names() {
 
 # ── notifications (portable: macOS / Linux) ───────────────────────────────────
 _notify() {
-  local title="${1//[\"\\]/ }" msg="${2//[\"\\]/ }"
+  local title="${1//[\"\\]/ }" msg="${2//[\"\\]/ }" file="${3:-}"
   if   command -v terminal-notifier >/dev/null 2>&1; then
     # Optional custom icon: AGENTDECK_NOTIFY_SENDER borrows another app's icon
     # and identity (a bundle id, e.g. com.apple.Terminal); AGENTDECK_NOTIFY_ICON
@@ -94,6 +116,16 @@ _notify() {
     local -a tn=(-title "$title" -message "$msg")
     [[ -n "${AGENTDECK_NOTIFY_SENDER:-}" ]] && tn+=(-sender "$AGENTDECK_NOTIFY_SENDER")
     [[ -n "${AGENTDECK_NOTIFY_ICON:-}"   ]] && tn+=(-appIcon "$AGENTDECK_NOTIFY_ICON")
+    # Click action: jump back to the waiting session. Without -execute,
+    # terminal-notifier's default click reveals its own bundle folder in Finder.
+    # The command runs detached via launchd; core_focus resolves the strategy.
+    # terminal-notifier hands the string to `/bin/sh -c`, so shell-quote both the
+    # launcher path and the (already-sanitized) file with %q to stay robust even
+    # if the install path contains spaces/metacharacters.
+    if [[ -n "$file" ]]; then
+      local _cmd; printf -v _cmd '%q focus %q' "$(_self)" "$file"
+      tn+=(-execute "$_cmd")
+    fi
     terminal-notifier "${tn[@]}" >/dev/null 2>&1 || true
   elif command -v osascript >/dev/null 2>&1; then
     # Force UTF-8 for AppleScript text: CoreFoundation picks the encoding from
@@ -116,13 +148,17 @@ _persist() {
   # (e.g. the codex notify path has neither).
   [[ -z "$msg" && -f "$file" ]] && msg="$(jq -r '.msg // empty' "$file" 2>/dev/null || true)"
   [[ -z "$pid" && -f "$file" ]] && pid="$(jq -r '.pid // empty' "$file" 2>/dev/null || true)"
+  local host mux
+  host="$(_detect_host)"; mux="$(_mux_name)"
   jq -n --arg id "$sid" --arg agent "$agent" --arg state "$state" \
         --arg proj "$proj" --arg tab "$tab" --arg cwd "$cwd" \
         --arg transcript "$transcript" --arg msg "$msg" --arg pid "$pid" \
+        --arg host "$host" --arg mux "$mux" \
         --argjson ts "$(date +%s)" \
     '{id:$id, agent:$agent, state:$state, proj:$proj, tab:$tab,
       cwd:$cwd, transcript:$transcript, msg:$msg,
-      pid:(if $pid=="" then null else ($pid|tonumber) end), ts:$ts}' > "$file"
+      pid:(if $pid=="" then null else ($pid|tonumber) end),
+      host:$host, mux:$mux, ts:$ts}' > "$file"
 }
 
 # ── ingest: the hook entrypoint ───────────────────────────────────────────────
@@ -159,8 +195,8 @@ _ingest_hook() {
 
   # Ambient banner: the one signal that works no matter which tab is focused.
   case "$event" in
-    Notification) _notify "⏳ $tab is waiting on you" "${msg:-needs input}" ;;
-    Stop) [[ "$AGENTDECK_NOTIFY_ON_STOP" == "1" ]] && _notify "✅ $tab finished" "${msg:-$repo}" ;;
+    Notification) _notify "⏳ $tab is waiting on you" "${msg:-needs input}" "${agent}-${sid//[^A-Za-z0-9._-]/-}.json" ;;
+    Stop) [[ "$AGENTDECK_NOTIFY_ON_STOP" == "1" ]] && _notify "✅ $tab finished" "${msg:-$repo}" "${agent}-${sid//[^A-Za-z0-9._-]/-}.json" ;;
   esac
   return 0
 }
@@ -181,7 +217,7 @@ _ingest_notify() {
   if [[ -n "$file" ]]; then sid="$(jq -r '.id' "$file")"; else sid="notify-${tab//[^A-Za-z0-9._-]/-}"; fi
   msg="$(jq -r '."last-assistant-message" // .last_assistant_message // empty' <<<"$payload" | head -c 280)"
   _persist "$agent" "$sid" "$state" "$proj" "$tab" "$cwd" "" "$msg" ""
-  [[ "$state" == "waiting" ]] && _notify "⏳ $tab is waiting on you" "${msg:-needs input}"
+  [[ "$state" == "waiting" ]] && _notify "⏳ $tab is waiting on you" "${msg:-needs input}" "${agent}-${sid//[^A-Za-z0-9._-]/-}.json"
   return 0
 }
 
@@ -241,6 +277,40 @@ core_kill() {
     fi
   fi
   rm -f "$f"
+}
+
+# focus: notification click handler. Runs detached (launchd, no tty), so it
+# selects the window without attaching, then brings the host app/tab forward.
+# Strategy is resolved HERE (at click time) from AGENTDECK_NOTIFY_FOCUS + the
+# recorded host, so config changes take effect without re-launching agents.
+core_focus() {
+  local b f host mux proj tab cwd strat
+  b="$(basename "${1:-}")"; [[ -n "$b" && "$b" == *.json ]] || return 0
+  f="$AGENTDECK_STATE_DIR/$b"; [[ -f "$f" ]] || return 0
+  strat="${AGENTDECK_NOTIFY_FOCUS:-auto}"
+  [[ "$strat" == "off" ]] && return 0
+  # Best-effort reads: tolerate a half-written/corrupt state file so a click
+  # never aborts the detached handler mid-way (// empty guards null fields, not
+  # jq's own parse-error exit; the 2>/dev/null || true covers the latter).
+  host="$(jq -r '.host // empty' "$f" 2>/dev/null || true)"
+  mux="$(jq -r '.mux // empty' "$f" 2>/dev/null || true)"
+  proj="$(jq -r '.proj // empty' "$f" 2>/dev/null || true)"
+  tab="$(jq -r '.tab // empty' "$f" 2>/dev/null || true)"
+  cwd="$(jq -r '.cwd // empty' "$f" 2>/dev/null || true)"
+  # Allowlist the mux name before it indexes a path to source: it comes verbatim
+  # from the (possibly poisoned) state file, and `..` would otherwise let the
+  # -f guard below source an arbitrary .sh outside the adapters dir.
+  case "$mux" in tmux|zellij) ;; *) mux="" ;; esac
+  # axis ①: make the agent's window active (best-effort) using the recorded mux.
+  if [[ -n "$mux" && -f "$AGENTDECK_LIB/mux/$mux.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$AGENTDECK_LIB/mux/$mux.sh"
+    mux_select "$proj" "$tab" 2>/dev/null || true
+  fi
+  # axis ②: bring the host app/tab to the front.
+  # shellcheck source=/dev/null
+  source "$AGENTDECK_LIB/focus.sh"
+  focus_host "$strat" "$host" "$cwd"
 }
 
 # forget: drop the state file only, leaving the agent running (for stale rows).
